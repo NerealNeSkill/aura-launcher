@@ -187,6 +187,10 @@
                 <action android:name="android.service.voice.VoiceInteractionService" />
             </intent-filter>
         </service>
+        <!-- Named by the assistant entry above (Android 11 requires one); not a recogniser, so no intent filter. -->
+        <service
+            android:name=".AuraRecognitionService"
+            android:exported="true" />
         <service
             android:name=".AuraVoiceSessionService"
             android:exported="true"
