@@ -242,6 +242,8 @@ public class AuraSearchActivity extends Activity {
                 if (ri.serviceInfo != null) services.add(new ComponentName(ri.serviceInfo.packageName, ri.serviceInfo.name));
             }
         } catch (RuntimeException ignored) { }
+        // Google TV's own recogniser hears the remote's microphone; the others (offline TTS engine and the like) go after it.
+        java.util.Collections.sort(services, (a, b) -> Boolean.compare(!a.getPackageName().contains("katniss"), !b.getPackageName().contains("katniss")));
         if (services.isEmpty() && !SpeechRecognizer.isRecognitionAvailable(this)) { systemDialog(); return; }
         try {
             if (recognizer != null) { recognizer.destroy(); recognizer = null; }
@@ -276,6 +278,10 @@ public class AuraSearchActivity extends Activity {
                     .putExtra(RecognizerIntent.EXTRA_LANGUAGE, "ru-RU")
                     .putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true));
         } catch (RuntimeException e) {
+            if (!services.isEmpty()) {
+                showMessage(t("Распознавание не запустилось: ", "Speech recognition did not start: ") + e);
+                return;
+            }
             systemDialog();
         }
     }
