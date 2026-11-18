@@ -1235,7 +1235,7 @@ public class AuraActivity extends Activity {
         }
         try {
             startActivity(new Intent(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
-            Toast.makeText(this, t("Включите «AURA: кнопки пульта» в спецвозможностях", "Switch on "AURA: remote buttons" under Accessibility"), Toast.LENGTH_LONG).show();
+            Toast.makeText(this, t("Включите «AURA: кнопки пульта» в спецвозможностях", "Switch on AURA: remote buttons under Accessibility"), Toast.LENGTH_LONG).show();
         } catch (ActivityNotFoundException | SecurityException e) {
             Toast.makeText(this, "adb shell pm grant " + getPackageName() + " android.permission.WRITE_SECURE_SETTINGS", Toast.LENGTH_LONG).show();
         }
