@@ -1338,11 +1338,17 @@ public class AuraActivity extends Activity {
             String msg;
             if (ok) {
                 switchHelperOn();
-                try {
-                    String flat = assistService().flattenToString();
-                    android.provider.Settings.Secure.putString(getContentResolver(), "assistant", flat);
-                    android.provider.Settings.Secure.putString(getContentResolver(), "voice_interaction_service", flat);
-                } catch (RuntimeException ignored) { }
+                // Disabling Google makes the system reset its assistant a moment later, so AURA is set after that, twice.
+                final android.os.Handler h = new android.os.Handler(android.os.Looper.getMainLooper());
+                final Runnable setAssistant = () -> {
+                    try {
+                        String flat = assistService().flattenToString();
+                        android.provider.Settings.Secure.putString(getContentResolver(), "assistant", flat);
+                        android.provider.Settings.Secure.putString(getContentResolver(), "voice_interaction_service", flat);
+                    } catch (RuntimeException ignored) { }
+                };
+                h.postDelayed(setAssistant, 2500);
+                h.postDelayed(() -> { setAssistant.run(); build("row:assistbtn"); }, 6000);
                 msg = t("Готово: AURA — ассистент, помощник кнопок включён, поиск Google отключён.\n\n", "Done: AURA is the assistant, the button helper is on and Google search is off.\n\n") + text;
             } else if ("no-adb".equals(text)) {
                 msg = t("Не удалось подключиться к ADB телевизора. Включите «Отладка по сети» (ADB over network, порт 5555) в «Для разработчиков» и нажмите ещё раз.",
