@@ -91,6 +91,20 @@ public class HomeKeyService extends AccessibilityService {
      * answers it by opening Google's voice window), not as a key this service could filter. With the voice search on,
      * AURA listens to the same broadcast and opens its own voice search; Google stays installed and enabled.
      */
+    private long lastVoiceOpen;
+
+    /** AURA's voice search; asked twice within a moment (the broadcast, then Google's window) it opens once. */
+    private void openAuraVoice() {
+        long now = SystemClock.elapsedRealtime();
+        if (now - lastVoiceOpen < 1500) return;
+        lastVoiceOpen = now;
+        try {
+            startActivity(new Intent(this, AuraSearchActivity.class)
+                    .putExtra(AuraSearchActivity.EXTRA_VOICE, true)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP));
+        } catch (RuntimeException ignored) { }
+    }
+
     @android.annotation.SuppressLint("UnspecifiedRegisterReceiverFlag")
     private void registerTclVoice() {
         if (tclVoiceReceiver != null) return;
@@ -98,11 +112,7 @@ public class HomeKeyService extends AccessibilityService {
             @Override
             public void onReceive(Context context, Intent intent) {
                 if (!AuraStyle.prefs(HomeKeyService.this).getBoolean(AuraStyle.K_VOICE, true)) return;
-                try {
-                    startActivity(new Intent(HomeKeyService.this, AuraSearchActivity.class)
-                            .putExtra(AuraSearchActivity.EXTRA_VOICE, true)
-                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP));
-                } catch (RuntimeException ignored) { }
+                openAuraVoice();
             }
         };
         try {
@@ -381,6 +391,16 @@ public class HomeKeyService extends AccessibilityService {
             } catch (PackageManager.NameNotFoundException notAnActivity) {
                 // a dialog, panel or overlay: the app under it is still in front
             }
+        }
+        // The remote's microphone: Google's voice window came up over AURA (TCL Assistant opens it), so close it and
+        // leave AURA's own voice search on screen.
+        if (event.getClassName() != null && event.getPackageName() != null
+                && event.getPackageName().toString().startsWith("com.google.android.katniss")
+                && event.getClassName().toString().contains("VoicePlate")
+                && AuraStyle.prefs(this).getBoolean(AuraStyle.K_VOICE, true)) {
+            performGlobalAction(GLOBAL_ACTION_BACK);
+            openAuraVoice();
+            return;
         }
         // power_on_home: the firmware opened Live TV by itself at power-on, before anyone pressed a key.
         if (powerOnRedirect(powerOnLiveTv, event.getPackageName(), SystemClock.elapsedRealtime(), powerOnUntil)) {

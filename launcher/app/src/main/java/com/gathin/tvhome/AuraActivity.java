@@ -1414,12 +1414,6 @@ public class AuraActivity extends Activity {
         final java.util.List<String> cmds = new java.util.ArrayList<>();
         cmds.add("cmd appops set " + getPackageName() + " APP_AUTO_START allow");
         cmds.add("pm grant " + getPackageName() + " android.permission.WRITE_SECURE_SETTINGS");
-        // TCL TVs: TCL Assistant answers the remote's microphone button by opening Google's voice window. Only that one
-        // receiver is switched off (Google stays on, voice input keeps working); AURA listens to the same broadcast itself.
-        try {
-            getPackageManager().getPackageInfo("com.tcl.assistant", 0);
-            cmds.add("pm disable com.tcl.assistant/.LongPressVoiceReceiver");
-        } catch (PackageManager.NameNotFoundException | RuntimeException ignored) { }
         Toast.makeText(this, t("Подключаюсь к ADB телевизора… Если ТВ спросит, разрешите «Всегда»", "Connecting to the TV's ADB... if it asks, allow \"Always\""), Toast.LENGTH_LONG).show();
         AdbShell.run(this, 5555, cmds, (ok, text) -> runOnUiThread(() -> {
             if (ok) {
