@@ -826,7 +826,7 @@ public class AuraSearchActivity extends Activity {
                 org.json.JSONObject th = sn.optJSONObject("thumbnails");
                 String thumb = "";
                 if (th != null) {
-                    for (String k : new String[]{"medium", "high", "default"}) {
+                    for (String k : new String[]{"maxres", "high", "standard", "medium", "default"}) {
                         org.json.JSONObject o = th.optJSONObject(k);
                         if (o != null && !o.optString("url", "").isEmpty()) { thumb = o.optString("url"); break; }
                     }
@@ -984,9 +984,18 @@ public class AuraSearchActivity extends Activity {
                     byte[] chunk = new byte[8192];
                     int n, total = 0;
                     while ((n = in.read(chunk)) > 0) { total += n; if (total > 2 * 1024 * 1024) return; buf.write(chunk, 0, n); }
-                    android.graphics.BitmapFactory.Options o = new android.graphics.BitmapFactory.Options();
-                    o.inSampleSize = 2;
                     byte[] data = buf.toByteArray();
+                    // Shrink only while the picture stays at least as large as the card it fills (two times that on a
+                    // TV's pixels is plenty): a fixed halving made small covers, such as YouTube's, blurry.
+                    android.graphics.BitmapFactory.Options bounds = new android.graphics.BitmapFactory.Options();
+                    bounds.inJustDecodeBounds = true;
+                    android.graphics.BitmapFactory.decodeByteArray(data, 0, data.length, bounds);
+                    int targetW = Math.max(into.getLayoutParams() != null ? into.getLayoutParams().width : 0, dp(120));
+                    int targetH = Math.max(into.getLayoutParams() != null ? into.getLayoutParams().height : 0, dp(140));
+                    int sample = 1;
+                    while (bounds.outWidth / (sample * 2) >= targetW * 2 && bounds.outHeight / (sample * 2) >= targetH * 2) sample *= 2;
+                    android.graphics.BitmapFactory.Options o = new android.graphics.BitmapFactory.Options();
+                    o.inSampleSize = sample;
                     final android.graphics.Bitmap bmp = android.graphics.BitmapFactory.decodeByteArray(data, 0, data.length, o);
                     if (bmp == null) return;
                     COVERS.put(url, bmp);
