@@ -1222,6 +1222,22 @@ public class AuraActivity extends Activity {
 
     private String helperComponent() { return getPackageName() + "/" + getPackageName() + ".HomeKeyService"; }
 
+    /** Switches the button helper off and on again, so Android binds it now that the auto-start right is given. */
+    private void rebindHelper() {
+        try {
+            String list = android.provider.Settings.Secure.getString(getContentResolver(), "enabled_accessibility_services");
+            String comp = helperComponent();
+            StringBuilder others = new StringBuilder();
+            if (list != null) {
+                for (String part : list.split(":")) {
+                    if (!part.isEmpty() && !part.equals(comp)) others.append(others.length() > 0 ? ":" : "").append(part);
+                }
+            }
+            android.provider.Settings.Secure.putString(getContentResolver(), "enabled_accessibility_services", others.toString());
+        } catch (RuntimeException ignored) { }
+        new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(this::switchHelperOn, 1500);
+    }
+
     /** Switches the button helper (an accessibility service) on when the app may write secure settings; false when it may not. */
     private boolean switchHelperOn() {
         try {
@@ -1289,11 +1305,14 @@ public class AuraActivity extends Activity {
     /** Makes AURA the Home app through this TV's own adbd. Nothing is switched off, so the TV always keeps a Home. */
     private void homeViaAdb() {
         final java.util.List<String> cmds = new java.util.ArrayList<>();
+        // TCL and some other firmware refuse to start an accessibility service whose app has no auto-start right.
+        cmds.add("cmd appops set " + getPackageName() + " APP_AUTO_START allow");
+        cmds.add("pm grant " + getPackageName() + " android.permission.WRITE_SECURE_SETTINGS");
         cmds.add("cmd package set-home-activity " + new ComponentName(this, MainActivity.class).flattenToShortString());
         Toast.makeText(this, t("Подключаюсь к ADB телевизора… Если ТВ спросит, разрешите «Всегда»", "Connecting to the TV's ADB... if it asks, allow \"Always\""), Toast.LENGTH_LONG).show();
         AdbShell.run(this, 5555, cmds, (ok, text) -> runOnUiThread(() -> {
             String msg;
-            if (ok) msg = t("Готово: AURA — главный экран.\n\n", "Done: AURA is the Home screen.\n\n") + text;
+            if (ok) { rebindHelper(); msg = t("Готово: AURA — главный экран. Домой со штатного экрана Google TV возвращает в AURA.\n\n", "Done: AURA is the Home screen. Home from the stock Google TV screen comes back to AURA.\n\n") + text; }
             else if ("no-adb".equals(text)) msg = t("Не удалось подключиться к ADB телевизора. Включите «Отладка по сети» (порт 5555) в «Для разработчиков» и нажмите ещё раз.", "Could not reach this TV's ADB. Turn on \"ADB over network\" (port 5555) under Developer options and try again.");
             else if ("timeout".equals(text)) msg = t("ТВ не ответил. Если на экране было окно «Разрешить отладку?», подтвердите «Всегда» и нажмите ещё раз.", "The TV did not answer. If it showed \"Allow debugging?\", confirm with \"Always\" and try again.");
             else msg = text;
@@ -1357,6 +1376,7 @@ public class AuraActivity extends Activity {
     /** Runs the commands on this TV through its own adbd (ADB over network, port 5555), then finishes the AURA side. */
     private void sendAdb(java.util.List<String> pkgs) {
         final java.util.List<String> cmds = new java.util.ArrayList<>();
+        cmds.add("cmd appops set " + getPackageName() + " APP_AUTO_START allow");
         cmds.add("pm grant " + getPackageName() + " android.permission.WRITE_SECURE_SETTINGS");
         for (String pkg : pkgs) cmds.add("pm disable-user --user 0 " + pkg);
         Toast.makeText(this, t("Подключаюсь к ADB телевизора… Если ТВ спросит, разрешите «Всегда»", "Connecting to the TV's ADB... if it asks, allow \"Always\""), Toast.LENGTH_LONG).show();
