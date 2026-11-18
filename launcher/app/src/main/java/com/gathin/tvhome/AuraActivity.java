@@ -335,19 +335,25 @@ public class AuraActivity extends Activity {
 
     // ---------------------------------------------------------------- frame
 
+    /** The left navigation rail; switched off at the owner's request, flip to bring it back. */
+    private static final boolean SHOW_RAIL = false;
+
     private void build(String focusTag) {
         pal = AuraStyle.palette(sp);
         root.removeAllViews();
         root.setBackground(AuraStyle.background(pal));
         if (sp.getBoolean(AuraStyle.K_WALL, true)) addWallpaper();
 
-        FrameLayout.LayoutParams rail = new FrameLayout.LayoutParams(dp(54), ViewGroup.LayoutParams.MATCH_PARENT);
-        rail.setMargins(dp(14), dp(14), 0, dp(14));
-        root.addView(rail(), rail);
+        // The side rail is off for now: Apps and Settings open from the Home page, Back returns to it.
+        if (SHOW_RAIL) {
+            FrameLayout.LayoutParams rail = new FrameLayout.LayoutParams(dp(54), ViewGroup.LayoutParams.MATCH_PARENT);
+            rail.setMargins(dp(14), dp(14), 0, dp(14));
+            root.addView(rail(), rail);
+        }
 
         LinearLayout main = box(true);
         FrameLayout.LayoutParams mp = new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT);
-        mp.setMargins(dp(84), dp(14), dp(28), dp(8));
+        mp.setMargins(dp(SHOW_RAIL ? 84 : 36), dp(14), dp(36), dp(8));
         main.addView(header(), lp(ViewGroup.LayoutParams.MATCH_PARENT, dp(36), 0));
         ScrollView sv = new ScrollView(this);
         sv.setVerticalScrollBarEnabled(false);
@@ -355,7 +361,7 @@ public class AuraActivity extends Activity {
         View content = page == HOME ? homePage() : page == APPS ? appsPage() : settingsPage();
         sv.addView(content, new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         main.addView(sv, lp(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f, 0, 10, 0, 0));
-        if (sp.getBoolean(AuraStyle.K_HINTS, true)) main.addView(hints(), lp(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, 0, 0, 4, 0, 0));
+        if (sp.getBoolean(AuraStyle.K_HINTS, false)) main.addView(hints(), lp(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, 0, 0, 4, 0, 0));
         root.addView(main, mp);
         if (sp.getBoolean(AuraStyle.K_ANIM, true)) {
             main.setAlpha(0f);
@@ -953,7 +959,7 @@ public class AuraActivity extends Activity {
             colors.addView(dot, lp(dp(26), dp(26), 0, i == 0 ? 0 : 10, 0, 0, 0));
         }
         p.addView(colors, lp(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, 0, 0, 0, 0, 8));
-        toggle(p, AuraStyle.K_HINTS, true, t("Подсказки управления на экране", "On-screen control hints"), t("Показывать действия кнопок пульта", "Show what the remote buttons do"), true);
+        toggle(p, AuraStyle.K_HINTS, false, t("Подсказки управления на экране", "On-screen control hints"), t("Показывать действия кнопок пульта", "Show what the remote buttons do"), true);
         choice(p, AuraStyle.K_RADIUS, 1, t("Скругление углов", "Corner roundness"), t("Форма карточек и плиток", "Shape of cards and tiles"),
                 new String[]{t("Малое", "Small"), t("Среднее", "Medium"), t("Большое", "Large")}, true);
         List<File> own = AuraWallpapers.list(this);
