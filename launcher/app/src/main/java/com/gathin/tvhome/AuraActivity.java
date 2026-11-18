@@ -1270,10 +1270,9 @@ public class AuraActivity extends Activity {
         }
         new AlertDialog.Builder(this, android.R.style.Theme_Material_Dialog_Alert)
                 .setTitle(t("AURA — главный экран", "AURA as the Home screen"))
-                .setMessage(t("Google TV не даёт выбрать главный экран в настройках. AURA может сделать это сама через ADB телевизора (нужна «Отладка по сети», порт 5555). Второй вариант ещё и отключает штатный лаунчер Google.",
-                        "Google TV does not let you pick the Home app in Settings. AURA can do it through this TV's own ADB (needs ADB over network, port 5555). The second option also turns off Google's stock launcher."))
-                .setPositiveButton(t("Сделать главным (ADB)", "Make it Home (ADB)"), (d, w) -> homeViaAdb(false))
-                .setNeutralButton(t("И отключить штатный", "And turn off the stock one"), (d, w) -> homeViaAdb(true))
+                .setMessage(t("Google TV не даёт выбрать главный экран в настройках. AURA может сделать это сама через ADB телевизора (нужна «Отладка по сети», порт 5555).",
+                        "Google TV does not let you pick the Home app in Settings. AURA can do it through this TV's own ADB (needs ADB over network, port 5555)."))
+                .setPositiveButton(t("Сделать главным (ADB)", "Make it Home (ADB)"), (d, w) -> homeViaAdb())
                 .setNegativeButton(t("Настройки ТВ", "TV settings"), (d, w) -> {
                     String[] pages = {android.provider.Settings.ACTION_HOME_SETTINGS, android.provider.Settings.ACTION_MANAGE_DEFAULT_APPS_SETTINGS};
                     for (String page : pages) {
@@ -1287,19 +1286,10 @@ public class AuraActivity extends Activity {
                 .show();
     }
 
-    /** Makes AURA the Home app through this TV's own adbd; optionally turns off the stock launchers that answer Home. */
-    private void homeViaAdb(boolean disableStock) {
+    /** Makes AURA the Home app through this TV's own adbd. Nothing is switched off, so the TV always keeps a Home. */
+    private void homeViaAdb() {
         final java.util.List<String> cmds = new java.util.ArrayList<>();
         cmds.add("cmd package set-home-activity " + new ComponentName(this, MainActivity.class).flattenToShortString());
-        if (disableStock) {
-            for (android.content.pm.ResolveInfo ri : getPackageManager().queryIntentActivities(
-                    new Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME), 0)) {
-                String pkg = ri.activityInfo.packageName;
-                if (!pkg.equals(getPackageName()) && pkg.contains("launcher") && !cmds.contains("pm disable-user --user 0 " + pkg)) {
-                    cmds.add("pm disable-user --user 0 " + pkg);
-                }
-            }
-        }
         Toast.makeText(this, t("Подключаюсь к ADB телевизора… Если ТВ спросит, разрешите «Всегда»", "Connecting to the TV's ADB... if it asks, allow \"Always\""), Toast.LENGTH_LONG).show();
         AdbShell.run(this, 5555, cmds, (ok, text) -> runOnUiThread(() -> {
             String msg;
