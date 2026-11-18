@@ -22,7 +22,7 @@ import java.security.KeyFactory;
 import java.security.KeyPair;
 import java.security.KeyPairGenerator;
 import java.security.Signature;
-import java.security.interfaces.RSAPrivateCrtKey;
+import java.security.interfaces.RSAPrivateKey;
 import java.security.spec.PKCS8EncodedKeySpec;
 import java.util.List;
 
@@ -68,7 +68,7 @@ final class AdbShell {
     }
 
     private static String execute(Context ctx, int port, String command) throws Exception {
-        RSAPrivateCrtKey key = loadKey(ctx);
+        RSAPrivateKey key = loadKey(ctx);
         try (Socket s = new Socket()) {
             s.connect(new InetSocketAddress("127.0.0.1", port), 3000);
             s.setSoTimeout(10000);
@@ -139,23 +139,23 @@ final class AdbShell {
         return m;
     }
 
-    private static RSAPrivateCrtKey loadKey(Context ctx) throws Exception {
+    private static RSAPrivateKey loadKey(Context ctx) throws Exception {
         File f = new File(ctx.getFilesDir(), "adb_key.pk8");
         KeyFactory kf = KeyFactory.getInstance("RSA");
         if (f.exists()) {
             byte[] der = new byte[(int) f.length()];
             try (DataInputStream in = new DataInputStream(new FileInputStream(f))) { in.readFully(der); }
-            return (RSAPrivateCrtKey) kf.generatePrivate(new PKCS8EncodedKeySpec(der));
+            return (RSAPrivateKey) kf.generatePrivate(new PKCS8EncodedKeySpec(der));
         }
         KeyPairGenerator g = KeyPairGenerator.getInstance("RSA");
         g.initialize(2048);
         KeyPair kp = g.generateKeyPair();
         try (FileOutputStream out = new FileOutputStream(f)) { out.write(kp.getPrivate().getEncoded()); }
-        return (RSAPrivateCrtKey) kp.getPrivate();
+        return (RSAPrivateKey) kp.getPrivate();
     }
 
     /** The public key in the layout adbd reads: length in words, -1/n mod 2^32, n, R^2 mod n, exponent (all little-endian). */
-    private static byte[] adbPublicKey(RSAPrivateCrtKey key) {
+    private static byte[] adbPublicKey(RSAPrivateKey key) {
         BigInteger n = key.getModulus();
         BigInteger two32 = BigInteger.ONE.shiftLeft(32);
         int n0inv = n.modInverse(two32).negate().mod(two32).intValue();
@@ -164,7 +164,7 @@ final class AdbShell {
         b.putInt(64).putInt(n0inv);
         for (int i = 0; i < 64; i++) b.putInt(n.shiftRight(32 * i).and(BigInteger.valueOf(0xffffffffL)).intValue());
         for (int i = 0; i < 64; i++) b.putInt(rr.shiftRight(32 * i).and(BigInteger.valueOf(0xffffffffL)).intValue());
-        b.putInt(key.getPublicExponent().intValue());
+        b.putInt(65537);
         return b.array();
     }
 }
