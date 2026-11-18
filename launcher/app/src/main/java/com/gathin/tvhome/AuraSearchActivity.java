@@ -729,13 +729,19 @@ public class AuraSearchActivity extends Activity {
         boolean other = false;
         final String enc = Uri.encode(q);
         String[] youtube = {"com.google.android.youtube.tv", "com.google.android.youtube"};
+        final String ytKey = youtubeKey();
+        String apiPkg = null;
+        Intent apiSearch = null;
         for (String yt : youtube) {
             Intent v = new Intent(Intent.ACTION_VIEW, Uri.parse("https://www.youtube.com/results?search_query=" + enc)).setPackage(yt);
             if (done.contains(yt) || off.contains(yt) || pm.resolveActivity(v, 0) == null) continue;
             done.add(yt);
             other = true;
+            if (!ytKey.isEmpty() && apiPkg == null) { apiPkg = yt; apiSearch = v; continue; }
             searchLine(yt, yt.endsWith(".tv") ? "YouTube" : "YouTube", v, q, "");
         }
+        final String ytPkg = apiPkg;
+        final Intent ytSearch = apiSearch;
         Intent play = new Intent("android.media.action.MEDIA_PLAY_FROM_SEARCH").putExtra(SearchManager.QUERY, q);
         for (ResolveInfo ri : pm.queryIntentActivities(play, 0)) {
             String pkg = ri.activityInfo.packageName;
@@ -757,6 +763,84 @@ public class AuraSearchActivity extends Activity {
                 final List<Hit> out = hits;
                 ui.post(() -> { if (mine == generation) { waiting.remove(s.label); showWaiting(query); addSource(s, out, query); } });
             });
+        }
+        if (ytPkg != null) {
+            final Source yts = new Source("YouTube", ytPkg, null);
+            waiting.add("YouTube");
+            showWaiting(query);
+            pool.execute(() -> {
+                final List<Hit> hits = youtubeSearch(ytKey, query, ytPkg, yts);
+                ui.post(() -> {
+                    if (mine != generation) return;
+                    waiting.remove("YouTube");
+                    showWaiting(query);
+                    if (hits != null && !hits.isEmpty()) addSource(yts, hits, query);
+                    else searchLine(ytPkg, "YouTube", ytSearch, query, yts.why);
+                });
+            });
+        }
+    }
+
+    /** The YouTube Data API key kept in this TV's config.json (youtube_api_key); never part of the source. */
+    private String youtubeKey() {
+        try {
+            java.io.File dir = Config.dir(this);
+            if (dir == null) return "";
+            java.io.File f = new java.io.File(dir, Config.FILE_NAME);
+            if (!f.isFile()) return "";
+            return new org.json.JSONObject(new String(java.nio.file.Files.readAllBytes(f.toPath()), "UTF-8")).optString("youtube_api_key", "").trim();
+        } catch (Exception e) {
+            return "";
+        }
+    }
+
+    /** Video results from the YouTube Data API (official, one search costs 100 of the 10,000 free daily units). Null when it gives nothing. */
+    private List<Hit> youtubeSearch(String key, String q, String pkg, Source s) {
+        java.net.HttpURLConnection c = null;
+        try {
+            String u = "https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&maxResults=8&q=" + Uri.encode(q) + "&key=" + Uri.encode(key);
+            c = (java.net.HttpURLConnection) new java.net.URL(u).openConnection();
+            c.setConnectTimeout(6000);
+            c.setReadTimeout(8000);
+            int code = c.getResponseCode();
+            if (code != 200) {
+                s.why = code == 403 ? t("лимит YouTube API на сегодня исчерпан или ключ не подходит", "YouTube API quota used up or the key is rejected")
+                        : t("YouTube API ответил " + code, "YouTube API answered " + code);
+                return null;
+            }
+            java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream();
+            byte[] buf = new byte[8192];
+            java.io.InputStream in = c.getInputStream();
+            for (int n; (n = in.read(buf)) > 0; ) out.write(buf, 0, n);
+            org.json.JSONArray items = new org.json.JSONObject(out.toString("UTF-8")).optJSONArray("items");
+            if (items == null) return null;
+            List<Hit> list = new ArrayList<>();
+            for (int i = 0; i < items.length(); i++) {
+                org.json.JSONObject it = items.getJSONObject(i);
+                org.json.JSONObject id = it.optJSONObject("id");
+                String vid = id == null ? "" : id.optString("videoId", "");
+                org.json.JSONObject sn = it.optJSONObject("snippet");
+                if (vid.isEmpty() || sn == null) continue;
+                String title = android.text.Html.fromHtml(sn.optString("title", ""), android.text.Html.FROM_HTML_MODE_LEGACY).toString();
+                String channel = android.text.Html.fromHtml(sn.optString("channelTitle", ""), android.text.Html.FROM_HTML_MODE_LEGACY).toString();
+                org.json.JSONObject th = sn.optJSONObject("thumbnails");
+                String thumb = "";
+                if (th != null) {
+                    for (String k : new String[]{"medium", "high", "default"}) {
+                        org.json.JSONObject o = th.optJSONObject(k);
+                        if (o != null && !o.optString("url", "").isEmpty()) { thumb = o.optString("url"); break; }
+                    }
+                }
+                Hit h = new Hit(title, channel, new Intent(Intent.ACTION_VIEW, Uri.parse("https://www.youtube.com/watch?v=" + vid)).setPackage(pkg));
+                if (!thumb.isEmpty()) h.posterUrl = thumb;
+                list.add(h);
+            }
+            return list;
+        } catch (Exception e) {
+            s.why = t("нет ответа от YouTube API", "no answer from the YouTube API");
+            return null;
+        } finally {
+            if (c != null) c.disconnect();
         }
     }
 
