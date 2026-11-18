@@ -261,6 +261,29 @@ public class HomeKeyService extends AccessibilityService {
                 && event.getKeyCode() != KeyEvent.KEYCODE_POWER && event.getKeyCode() != KeyEvent.KEYCODE_WAKEUP) {
             powerOnUntil = 0;
         }
+        // AURA: the remote's microphone (assist) button opens AURA's own voice search instead of the stock one.
+        int code = event.getKeyCode();
+        if (event.getAction() == KeyEvent.ACTION_UP) {
+            // For the "teach the microphone button" screen: the last button this helper saw, so a button that never arrives is visible.
+            AuraStyle.prefs(this).edit().putString(AuraStyle.K_LAST_KEY, code + ":" + event.getScanCode() + ":" + System.currentTimeMillis()).apply();
+        }
+        AuraStyle.KeyLearner learn = AuraStyle.learner;
+        if (learn != null && code != KeyEvent.KEYCODE_BACK && code != KeyEvent.KEYCODE_DPAD_CENTER && code != KeyEvent.KEYCODE_ENTER
+                && code != KeyEvent.KEYCODE_HOME && code != KeyEvent.KEYCODE_DPAD_UP && code != KeyEvent.KEYCODE_DPAD_DOWN
+                && code != KeyEvent.KEYCODE_DPAD_LEFT && code != KeyEvent.KEYCODE_DPAD_RIGHT) {
+            if (event.getAction() == KeyEvent.ACTION_UP) { AuraStyle.learner = null; learn.learned(code, event.getScanCode()); }
+            return true;
+        }
+        if (AuraStyle.prefs(this).getBoolean(AuraStyle.K_VOICE, true) && AuraStyle.isMicKey(AuraStyle.prefs(this), event)) {
+            if (event.getAction() == KeyEvent.ACTION_UP && !event.isCanceled()) {
+                try {
+                    startActivity(new Intent(this, AuraSearchActivity.class)
+                            .putExtra(AuraSearchActivity.EXTRA_VOICE, true)
+                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP));
+                } catch (RuntimeException ignored) { }
+            }
+            return true;
+        }
         if (consumeVolumeKeys && VolumeKeys.handle(this, event)) return true;
         // A scancode entry is more specific than any keycode, so it goes first.
         if (RemoteKeys.handle(this, event, inFront(appScancodes, frontAppScancodes, event.getScanCode()),

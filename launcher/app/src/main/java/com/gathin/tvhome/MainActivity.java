@@ -452,12 +452,35 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
 
     private java.util.Map<Integer, String> homeAppKeys = java.util.Collections.emptyMap();
     /** clock_format, for the race panel's session times (the TextClocks take it in onCreate). */
+    /** True when this Home handed over to the AURA home screen and finished before building its own views. */
+    private boolean handedOver;
     private String clockFormat = "system";
     private java.util.Map<Integer, String> homeHoldAppKeys = java.util.Collections.emptyMap();
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        // AURA home screen (aura_ui): hand Home over to it. The Inputs request stays here, where the Inputs menu lives.
+        if (!ACTION_VIEW_INPUTS.equals(getIntent().getAction()) && AuraStyle.shouldRun(this)) {
+            Intent aura = new Intent(this, AuraActivity.class).setAction(getIntent().getAction())
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+            try {
+                startActivity(aura);
+                handedOver = true;
+                finish();
+                return;
+            } catch (RuntimeException e) {
+                // Fall through to the classic Home.
+            }
+        }
+        // AURA is the only look of this build: when it was switched off after repeated crashes, Home goes to the TV's own
+        // home screen. Only a TV with no other home screen left falls through to this one, so it is never without Home.
+        if (!ACTION_VIEW_INPUTS.equals(getIntent().getAction()) && !handedOver && AuraStyle.enabled(this) && !AuraStyle.shouldRun(this)
+                && AuraStyle.openStockHome(this)) {
+            handedOver = true;
+            finish();
+            return;
+        }
         setContentView(R.layout.activity_main);
         density = getResources().getDisplayMetrics().density;
         // config.xml, overlaid by config.json from a pushed theme (see Config and tools/theme.sh).
@@ -1055,6 +1078,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     @Override
     protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
+        if (handedOver) return;
         if (openLauncherSettingsIfAsked(intent)) return;
         if (openLibraryIfAsked(intent)) return;
         if (openInputsIfAsked(intent)) return;
@@ -1075,6 +1099,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     @Override
     protected void onStart() {
         super.onStart();
+        if (handedOver) return;
         stopped = false;
         started = true;
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -1090,6 +1115,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     @Override
     protected void onResume() {
         super.onResume();
+        if (handedOver) return;
         resumed = true;
         // A festival that started or ended while Home was in the background: rebuild with or without it.
         if (festive != festival.active(LocalDate.now())) {
@@ -1295,6 +1321,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     @Override
     public void onUserInteraction() {
         super.onUserInteraction();
+        if (handedOver) return;
         restartIdleClock();
     }
 
@@ -1306,6 +1333,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     @Override
     protected void onPause() {
         super.onPause();
+        if (handedOver) return;
         resumed = false;
         // No UP reaches a paused Home, so a vendor-key hold it saw go down would still open its app later.
         // Only Home's own share is dropped: a key service that saw the same DOWN keeps its hold.
@@ -1335,6 +1363,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     @Override
     protected void onStop() {
         super.onStop();
+        if (handedOver) return;
         started = false;
         unregisterReceiver(timeReceiver);
         clockRefresh.stop();
@@ -1368,6 +1397,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     @Override
     public void onWindowFocusChanged(boolean hasFocus) {
         super.onWindowFocusChanged(hasFocus);
+        if (handedOver) return;
         if (hasFocus) {
             startPendingSettingsReorder();
             if (libraryFocusPending && appLibrary == null) focusLibrary();
@@ -1386,6 +1416,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     @Override
     protected void onDestroy() {
         super.onDestroy();
+        if (handedOver) return;
         ViewTreeObserver tree = getWindow().getDecorView().getViewTreeObserver();
         if (tree.isAlive()) tree.removeOnGlobalFocusChangeListener(glassFocusListener);
         RemoteKeys.release(this);
