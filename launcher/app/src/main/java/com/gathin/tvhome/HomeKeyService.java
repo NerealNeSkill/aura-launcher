@@ -91,6 +91,7 @@ public class HomeKeyService extends AccessibilityService {
      * answers it by opening Google's voice window), not as a key this service could filter. With the voice search on,
      * AURA listens to the same broadcast and opens its own voice search; Google stays installed and enabled.
      */
+    @android.annotation.SuppressLint("UnspecifiedRegisterReceiverFlag")
     private void registerTclVoice() {
         if (tclVoiceReceiver != null) return;
         tclVoiceReceiver = new BroadcastReceiver() {
