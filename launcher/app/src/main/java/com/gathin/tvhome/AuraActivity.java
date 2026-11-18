@@ -1009,6 +1009,9 @@ public class AuraActivity extends Activity {
         action(p, "assistbtn", t("Кнопка микрофона на пульте", "Remote microphone button"),
                 t("Выбрать AURA ассистентом: кнопка откроет голосовой поиск AURA", "Make AURA the assistant: the button opens AURA's voice search"),
                 isAssistant() ? t("включено", "on") : t("не выбрано", "not set"), this::becomeAssistant);
+        action(p, "googlesearch", t("Заменить поиск Google на AURA", "Replace Google search with AURA"),
+                t("Сделать AURA ассистентом и отключить приложение поиска Google командой ADB", "Make AURA the assistant and turn off the Google search app with an ADB command"),
+                googleSearchOn() ? t("Google включён", "Google on") : t("Google выключен", "Google off"), this::replaceGoogleSearch);
         action(p, "micbtn", t("Назначить кнопку микрофона", "Teach the microphone button"),
                 t("Нажмите нужную кнопку на пульте: она откроет голосовой поиск", "Press a button on the remote: it will open voice search"),
                 AuraStyle.prefs(this).getString(AuraStyle.K_MIC_KEYS, "").isEmpty() ? "" : t("назначена", "taught"), this::learnMicButton);
@@ -1192,6 +1195,57 @@ public class AuraActivity extends Activity {
                     return false;
                 })
                 .setOnDismissListener(d -> { if (AuraStyle.learner == done) AuraStyle.learner = null; })
+                .show();
+    }
+
+    private static final String GOOGLE_SEARCH = "com.google.android.googlequicksearchbox";
+
+    private boolean googleSearchOn() {
+        try { return getPackageManager().getApplicationInfo(GOOGLE_SEARCH, 0).enabled; }
+        catch (PackageManager.NameNotFoundException | RuntimeException e) { return false; }
+    }
+
+    /**
+     * An app cannot switch another app off, so this sets AURA as the assistant where it may and then hands over the
+     * ADB commands that finish the job (disable Google search), with a Copy button.
+     */
+    private void replaceGoogleSearch() {
+        boolean assistant = false;
+        try {
+            String flat = assistService().flattenToString();
+            android.provider.Settings.Secure.putString(getContentResolver(), "assistant", flat);
+            android.provider.Settings.Secure.putString(getContentResolver(), "voice_interaction_service", flat);
+            assistant = true;
+        } catch (RuntimeException ignored) {
+        }
+        final StringBuilder cmd = new StringBuilder();
+        if (!assistant) cmd.append("adb shell pm grant ").append(getPackageName()).append(" android.permission.WRITE_SECURE_SETTINGS
+");
+        cmd.append("adb shell pm disable-user --user 0 ").append(GOOGLE_SEARCH);
+        final String undo = "adb shell pm enable " + GOOGLE_SEARCH;
+        String msg = (assistant ? t("AURA выбрана ассистентом. ", "AURA is now the assistant. ") : t("Чтобы AURA стала ассистентом, сначала выдайте право. ", "First grant the permission so AURA can become the assistant. "))
+                + t("Приложение не может отключить Google само. Выполните на ПК (ТВ подключён по ADB):
+
+", "An app cannot turn Google off itself. Run on a PC (the TV connected over ADB):
+
+")
+                + cmd + t("
+
+Вернуть Google:
+", "
+
+To bring Google back:
+") + undo;
+        new AlertDialog.Builder(this, android.R.style.Theme_Material_Dialog_Alert)
+                .setTitle(t("Заменить поиск Google на AURA", "Replace Google search with AURA"))
+                .setMessage(msg)
+                .setPositiveButton(t("Скопировать", "Copy"), (d, w) -> {
+                    android.content.ClipboardManager cm = (android.content.ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
+                    if (cm != null) cm.setPrimaryClip(android.content.ClipData.newPlainText("adb", cmd.toString()));
+                    Toast.makeText(this, t("Команды скопированы", "Commands copied"), Toast.LENGTH_SHORT).show();
+                })
+                .setNegativeButton(android.R.string.cancel, null)
+                .setOnDismissListener(d -> build("row:googlesearch"))
                 .show();
     }
 
