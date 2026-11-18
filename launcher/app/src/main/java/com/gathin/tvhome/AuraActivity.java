@@ -1204,7 +1204,21 @@ public class AuraActivity extends Activity {
                 .show();
     }
 
-    private static final String GOOGLE_SEARCH = "com.google.android.googlequicksearchbox";
+    /** Google's search and assistant apps: katniss on Android TV / Google TV, the Google app on phones and some boxes. */
+    private static final String[] GOOGLE_SEARCH = {"com.google.android.katniss", "com.google.android.googlequicksearchbox"};
+
+    private java.util.List<String> googleInstalled(boolean onlyEnabled) {
+        java.util.List<String> out = new java.util.ArrayList<>();
+        for (String pkg : GOOGLE_SEARCH) {
+            try {
+                if (!onlyEnabled || getPackageManager().getApplicationInfo(pkg, 0).enabled) {
+                    getPackageManager().getApplicationInfo(pkg, 0);
+                    out.add(pkg);
+                }
+            } catch (PackageManager.NameNotFoundException | RuntimeException ignored) { }
+        }
+        return out;
+    }
 
     private String helperComponent() { return getPackageName() + "/" + getPackageName() + ".HomeKeyService"; }
 
@@ -1267,8 +1281,7 @@ public class AuraActivity extends Activity {
     }
 
     private boolean googleSearchOn() {
-        try { return getPackageManager().getApplicationInfo(GOOGLE_SEARCH, 0).enabled; }
-        catch (PackageManager.NameNotFoundException | RuntimeException e) { return false; }
+        return !googleInstalled(true).isEmpty();
     }
 
     /**
@@ -1289,8 +1302,15 @@ public class AuraActivity extends Activity {
         if (!assistant || !helper) cmd.append("adb shell pm grant ").append(getPackageName()).append(" android.permission.WRITE_SECURE_SETTINGS\n");
         if (!helper) cmd.append("adb shell settings put secure enabled_accessibility_services ").append(helperComponent())
                 .append("\nadb shell settings put secure accessibility_enabled 1\n");
-        cmd.append("adb shell pm disable-user --user 0 ").append(GOOGLE_SEARCH);
-        final String undo = "adb shell pm enable " + GOOGLE_SEARCH;
+        java.util.List<String> pkgs = googleInstalled(false);
+        if (pkgs.isEmpty()) pkgs.add(GOOGLE_SEARCH[0]);
+        StringBuilder undoSb = new StringBuilder();
+        for (int i = 0; i < pkgs.size(); i++) {
+            if (i > 0) { cmd.append("\n"); undoSb.append("\n"); }
+            cmd.append("adb shell pm disable-user --user 0 ").append(pkgs.get(i));
+            undoSb.append("adb shell pm enable ").append(pkgs.get(i));
+        }
+        final String undo = undoSb.toString();
         String msg = (assistant ? t("AURA выбрана ассистентом. ", "AURA is now the assistant. ") : t("Чтобы AURA стала ассистентом, сначала выдайте право. ", "First grant the permission so AURA can become the assistant. "))
                 + t("Приложение не может отключить Google само. Выполните на ПК (ТВ подключён по ADB):\n\n", "An app cannot turn Google off itself. Run on a PC (the TV connected over ADB):\n\n")
                 + cmd + t("\n\nВернуть Google:\n", "\n\nTo bring Google back:\n") + undo;

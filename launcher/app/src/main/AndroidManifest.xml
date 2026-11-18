@@ -38,6 +38,7 @@
          apps that declare a module card (docs/specs/card.md). -->
     <queries>
         <package android:name="com.google.android.googlequicksearchbox" />
+        <package android:name="com.google.android.katniss" />
         <!-- AURA search: apps that play from a search, and YouTube's own links. -->
         <intent>
             <action android:name="android.media.action.MEDIA_PLAY_FROM_SEARCH" />
