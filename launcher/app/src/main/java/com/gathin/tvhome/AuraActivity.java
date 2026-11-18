@@ -1219,23 +1219,12 @@ public class AuraActivity extends Activity {
         } catch (RuntimeException ignored) {
         }
         final StringBuilder cmd = new StringBuilder();
-        if (!assistant) cmd.append("adb shell pm grant ").append(getPackageName()).append(" android.permission.WRITE_SECURE_SETTINGS
-");
+        if (!assistant) cmd.append("adb shell pm grant ").append(getPackageName()).append(" android.permission.WRITE_SECURE_SETTINGS\n");
         cmd.append("adb shell pm disable-user --user 0 ").append(GOOGLE_SEARCH);
         final String undo = "adb shell pm enable " + GOOGLE_SEARCH;
         String msg = (assistant ? t("AURA выбрана ассистентом. ", "AURA is now the assistant. ") : t("Чтобы AURA стала ассистентом, сначала выдайте право. ", "First grant the permission so AURA can become the assistant. "))
-                + t("Приложение не может отключить Google само. Выполните на ПК (ТВ подключён по ADB):
-
-", "An app cannot turn Google off itself. Run on a PC (the TV connected over ADB):
-
-")
-                + cmd + t("
-
-Вернуть Google:
-", "
-
-To bring Google back:
-") + undo;
+                + t("Приложение не может отключить Google само. Выполните на ПК (ТВ подключён по ADB):\n\n", "An app cannot turn Google off itself. Run on a PC (the TV connected over ADB):\n\n")
+                + cmd + t("\n\nВернуть Google:\n", "\n\nTo bring Google back:\n") + undo;
         new AlertDialog.Builder(this, android.R.style.Theme_Material_Dialog_Alert)
                 .setTitle(t("Заменить поиск Google на AURA", "Replace Google search with AURA"))
                 .setMessage(msg)
