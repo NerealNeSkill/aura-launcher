@@ -394,13 +394,16 @@ public class HomeKeyService extends AccessibilityService {
         }
         // The remote's microphone: Google's voice window came up over AURA (TCL Assistant opens it), so close it and
         // leave AURA's own voice search on screen.
+        // Only within a few seconds of the microphone broadcast, so Google's own settings and set-up screens are left alone.
         if (event.getClassName() != null && event.getPackageName() != null
                 && event.getPackageName().toString().startsWith("com.google.android.katniss")
-                && event.getClassName().toString().contains("VoicePlate")
+                && SystemClock.elapsedRealtime() - lastVoiceOpen < 4000
                 && AuraStyle.prefs(this).getBoolean(AuraStyle.K_VOICE, true)) {
-            performGlobalAction(GLOBAL_ACTION_BACK);
-            openAuraVoice();
-            return;
+            String window = event.getClassName().toString();
+            if (!window.contains("Setup") && !window.contains("Settings") && !window.contains("Consent")) {
+                performGlobalAction(GLOBAL_ACTION_BACK);
+                return;
+            }
         }
         // power_on_home: the firmware opened Live TV by itself at power-on, before anyone pressed a key.
         if (powerOnRedirect(powerOnLiveTv, event.getPackageName(), SystemClock.elapsedRealtime(), powerOnUntil)) {
