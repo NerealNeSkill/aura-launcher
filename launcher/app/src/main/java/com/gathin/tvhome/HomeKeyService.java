@@ -84,6 +84,34 @@ public class HomeKeyService extends AccessibilityService {
     private boolean powerOnAlways;
     /** power_on_home: re-arms after the screen turns on; null unless the key is on. */
     private BroadcastReceiver screenOnReceiver;
+    private BroadcastReceiver tclVoiceReceiver;
+
+    /**
+     * TCL's remote sends its microphone button as the broadcast com.tcl.framework.custom.longpress.voice (TCL Assistant
+     * answers it by opening Google's voice window), not as a key this service could filter. With the voice search on,
+     * AURA listens to the same broadcast and opens its own voice search; Google stays installed and enabled.
+     */
+    private void registerTclVoice() {
+        if (tclVoiceReceiver != null) return;
+        tclVoiceReceiver = new BroadcastReceiver() {
+            @Override
+            public void onReceive(Context context, Intent intent) {
+                if (!AuraStyle.prefs(HomeKeyService.this).getBoolean(AuraStyle.K_VOICE, true)) return;
+                try {
+                    startActivity(new Intent(HomeKeyService.this, AuraSearchActivity.class)
+                            .putExtra(AuraSearchActivity.EXTRA_VOICE, true)
+                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP));
+                } catch (RuntimeException ignored) { }
+            }
+        };
+        try {
+            IntentFilter f = new IntentFilter("com.tcl.framework.custom.longpress.voice");
+            if (Build.VERSION.SDK_INT >= 33) registerReceiver(tclVoiceReceiver, f, Context.RECEIVER_EXPORTED);
+            else registerReceiver(tclVoiceReceiver, f);
+        } catch (RuntimeException e) {
+            tclVoiceReceiver = null;
+        }
+    }
     /** Stops key filtering while a game controller is connected or after a volume change; null unless gamepad_passthrough or volume_pauses_filter, and key_filter, or before the unlock. */
     private GamepadPassthrough gamepads;
     /** Screen-off receiver while guard_off_in_standby is set; null otherwise. */
@@ -97,6 +125,7 @@ public class HomeKeyService extends AccessibilityService {
     protected void onServiceConnected() {
         super.onServiceConnected();
         running = this;
+        registerTclVoice();
         settingsScancodes = getResources().getIntArray(R.array.settings_key_scancodes);
         // The service is directBootAware: Android 11 skips a service that is not while the user is still
         // locked at boot, writes accessibility_enabled=0 and, on TCL G03 firmware, never binds it after the
@@ -141,6 +170,7 @@ public class HomeKeyService extends AccessibilityService {
         RemoteKeys.frontPackage = "";
         RemoteKeys.release(this);
         stopWaitingForUnlock();
+        if (tclVoiceReceiver != null) { try { unregisterReceiver(tclVoiceReceiver); } catch (RuntimeException ignored) { } tclVoiceReceiver = null; }
         if (screenOnReceiver != null) unregisterReceiver(screenOnReceiver);
         if (standbyExit != null) {
             try {

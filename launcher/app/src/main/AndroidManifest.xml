@@ -39,6 +39,7 @@
     <queries>
         <package android:name="com.google.android.googlequicksearchbox" />
         <package android:name="com.google.android.katniss" />
+        <package android:name="com.tcl.assistant" />
         <!-- AURA search: apps that play from a search, and YouTube's own links. -->
         <intent>
             <action android:name="android.media.action.MEDIA_PLAY_FROM_SEARCH" />
