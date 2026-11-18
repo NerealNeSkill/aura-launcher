@@ -1019,6 +1019,12 @@ public class AuraActivity extends Activity {
     }
 
     private void remotePanel(LinearLayout p) {
+        action(p, "helper", t("Помощник кнопок (спецвозможности)", "Button helper (accessibility)"),
+                t("Нужен, чтобы AURA видела кнопки пульта: микрофон, поиск, Домой", "Lets AURA see the remote's buttons: microphone, search, Home"),
+                AuraStyle.helperOn(this) ? t("включён", "on") : t("выключен", "off"), this::enableHelper);
+        action(p, "homedefault", t("AURA — главный экран", "AURA as the Home screen"),
+                t("Выбрать AURA приложением «Домой» по умолчанию", "Make AURA the default Home app"),
+                isDefaultHome() ? t("выбрано", "set") : t("не выбрано", "not set"), this::makeDefaultHome);
         action(p, "inputs", t("Источники сигнала", "Inputs"), t("HDMI, AV и антенна", "HDMI, AV and tuner"), "", this::openInputs);
         action(p, "onstart", t("Открывать при включении ТВ", "Open at power-on"),
                 t("Приложение, которое запустится после включения", "The app that starts after the TV is switched on"),
@@ -1200,6 +1206,66 @@ public class AuraActivity extends Activity {
 
     private static final String GOOGLE_SEARCH = "com.google.android.googlequicksearchbox";
 
+    private String helperComponent() { return getPackageName() + "/" + getPackageName() + ".HomeKeyService"; }
+
+    /** Switches the button helper (an accessibility service) on when the app may write secure settings; false when it may not. */
+    private boolean switchHelperOn() {
+        try {
+            String list = android.provider.Settings.Secure.getString(getContentResolver(), "enabled_accessibility_services");
+            String comp = helperComponent();
+            if (list == null || list.isEmpty()) list = comp;
+            else if (!list.contains(comp)) list = list + ":" + comp;
+            android.provider.Settings.Secure.putString(getContentResolver(), "enabled_accessibility_services", list);
+            android.provider.Settings.Secure.putInt(getContentResolver(), "accessibility_enabled", 1);
+            return true;
+        } catch (RuntimeException e) {
+            return false;
+        }
+    }
+
+    private void enableHelper() {
+        if (AuraStyle.helperOn(this)) {
+            Toast.makeText(this, t("Помощник кнопок уже включён", "The button helper is already on"), Toast.LENGTH_SHORT).show();
+            return;
+        }
+        if (switchHelperOn()) {
+            Toast.makeText(this, t("Помощник кнопок включён", "Button helper switched on"), Toast.LENGTH_LONG).show();
+            build("row:helper");
+            return;
+        }
+        try {
+            startActivity(new Intent(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+            Toast.makeText(this, t("Включите службу «AURA» в спецвозможностях", "Switch on the AURA service under Accessibility"), Toast.LENGTH_LONG).show();
+        } catch (ActivityNotFoundException | SecurityException e) {
+            Toast.makeText(this, "adb shell pm grant " + getPackageName() + " android.permission.WRITE_SECURE_SETTINGS", Toast.LENGTH_LONG).show();
+        }
+    }
+
+    private boolean isDefaultHome() {
+        try {
+            android.content.pm.ResolveInfo ri = getPackageManager().resolveActivity(
+                    new Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME), PackageManager.MATCH_DEFAULT_ONLY);
+            return ri != null && ri.activityInfo != null && getPackageName().equals(ri.activityInfo.packageName);
+        } catch (RuntimeException e) { return false; }
+    }
+
+    private void makeDefaultHome() {
+        if (isDefaultHome()) {
+            Toast.makeText(this, t("AURA уже главный экран", "AURA is already the Home screen"), Toast.LENGTH_SHORT).show();
+            return;
+        }
+        String[] pages = {android.provider.Settings.ACTION_HOME_SETTINGS, android.provider.Settings.ACTION_MANAGE_DEFAULT_APPS_SETTINGS};
+        for (String page : pages) {
+            try {
+                startActivity(new Intent(page).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+                Toast.makeText(this, t("Выберите AURA в пункте «Главный экран»", "Pick AURA under \"Home app\""), Toast.LENGTH_LONG).show();
+                return;
+            } catch (ActivityNotFoundException | SecurityException ignored) {
+            }
+        }
+        Toast.makeText(this, "adb shell cmd package set-home-activity " + getPackageName() + "/.MainActivity", Toast.LENGTH_LONG).show();
+    }
+
     private boolean googleSearchOn() {
         try { return getPackageManager().getApplicationInfo(GOOGLE_SEARCH, 0).enabled; }
         catch (PackageManager.NameNotFoundException | RuntimeException e) { return false; }
@@ -1218,8 +1284,11 @@ public class AuraActivity extends Activity {
             assistant = true;
         } catch (RuntimeException ignored) {
         }
+        boolean helper = AuraStyle.helperOn(this) || switchHelperOn();
         final StringBuilder cmd = new StringBuilder();
-        if (!assistant) cmd.append("adb shell pm grant ").append(getPackageName()).append(" android.permission.WRITE_SECURE_SETTINGS\n");
+        if (!assistant || !helper) cmd.append("adb shell pm grant ").append(getPackageName()).append(" android.permission.WRITE_SECURE_SETTINGS\n");
+        if (!helper) cmd.append("adb shell settings put secure enabled_accessibility_services ").append(helperComponent())
+                .append("\nadb shell settings put secure accessibility_enabled 1\n");
         cmd.append("adb shell pm disable-user --user 0 ").append(GOOGLE_SEARCH);
         final String undo = "adb shell pm enable " + GOOGLE_SEARCH;
         String msg = (assistant ? t("AURA выбрана ассистентом. ", "AURA is now the assistant. ") : t("Чтобы AURA стала ассистентом, сначала выдайте право. ", "First grant the permission so AURA can become the assistant. "))
