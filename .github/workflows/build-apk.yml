@@ -1,11 +1,11 @@
 name: Build APK
 
 # Builds the launcher and publishes the APK as the "aura-latest" pre-release, so it can be downloaded
-# in a phone's browser and installed. Run it by hand (Actions tab, "Run workflow") or push to the AURA branch.
+# in a phone's browser and installed. Run it by hand (Actions tab, "Run workflow") or push to main.
 on:
   workflow_dispatch:
   push:
-    branches: [claude/project-thread-sh0pel]
+    branches: [main]
 
 permissions:
   contents: write
