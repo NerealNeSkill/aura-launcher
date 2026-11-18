@@ -1317,7 +1317,8 @@ public class AuraActivity extends Activity {
         new AlertDialog.Builder(this, android.R.style.Theme_Material_Dialog_Alert)
                 .setTitle(t("Заменить поиск Google на AURA", "Replace Google search with AURA"))
                 .setMessage(msg)
-                .setPositiveButton(t("Скопировать", "Copy"), (d, w) -> {
+                .setPositiveButton(t("Отправить на ТВ (ADB)", "Send to this TV (ADB)"), (d, w) -> sendAdb(pkgs))
+                .setNeutralButton(t("Скопировать", "Copy"), (d, w) -> {
                     android.content.ClipboardManager cm = (android.content.ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
                     if (cm != null) cm.setPrimaryClip(android.content.ClipData.newPlainText("adb", cmd.toString()));
                     Toast.makeText(this, t("Команды скопированы", "Commands copied"), Toast.LENGTH_SHORT).show();
@@ -1325,6 +1326,40 @@ public class AuraActivity extends Activity {
                 .setNegativeButton(android.R.string.cancel, null)
                 .setOnDismissListener(d -> build("row:googlesearch"))
                 .show();
+    }
+
+    /** Runs the commands on this TV through its own adbd (ADB over network, port 5555), then finishes the AURA side. */
+    private void sendAdb(java.util.List<String> pkgs) {
+        final java.util.List<String> cmds = new java.util.ArrayList<>();
+        cmds.add("pm grant " + getPackageName() + " android.permission.WRITE_SECURE_SETTINGS");
+        for (String pkg : pkgs) cmds.add("pm disable-user --user 0 " + pkg);
+        Toast.makeText(this, t("Подключаюсь к ADB телевизора… Если ТВ спросит, разрешите «Всегда»", "Connecting to the TV's ADB... if it asks, allow \"Always\""), Toast.LENGTH_LONG).show();
+        AdbShell.run(this, 5555, cmds, (ok, text) -> runOnUiThread(() -> {
+            String msg;
+            if (ok) {
+                switchHelperOn();
+                try {
+                    String flat = assistService().flattenToString();
+                    android.provider.Settings.Secure.putString(getContentResolver(), "assistant", flat);
+                    android.provider.Settings.Secure.putString(getContentResolver(), "voice_interaction_service", flat);
+                } catch (RuntimeException ignored) { }
+                msg = t("Готово: AURA — ассистент, помощник кнопок включён, поиск Google отключён.\n\n", "Done: AURA is the assistant, the button helper is on and Google search is off.\n\n") + text;
+            } else if ("no-adb".equals(text)) {
+                msg = t("Не удалось подключиться к ADB телевизора. Включите «Отладка по сети» (ADB over network, порт 5555) в «Для разработчиков» и нажмите ещё раз.",
+                        "Could not reach this TV's ADB. Turn on \"ADB over network\" (port 5555) under Developer options and try again.");
+            } else if ("timeout".equals(text)) {
+                msg = t("ТВ не ответил. Если на экране было окно «Разрешить отладку?», подтвердите «Всегда» и нажмите ещё раз.",
+                        "The TV did not answer. If it showed \"Allow debugging?\", confirm with \"Always\" and try again.");
+            } else {
+                msg = text;
+            }
+            new AlertDialog.Builder(this, android.R.style.Theme_Material_Dialog_Alert)
+                    .setTitle(t("Заменить поиск Google на AURA", "Replace Google search with AURA"))
+                    .setMessage(msg)
+                    .setPositiveButton(android.R.string.ok, null)
+                    .setOnDismissListener(d -> build("row:googlesearch"))
+                    .show();
+        }));
     }
 
     private ComponentName assistService() { return new ComponentName(getPackageName(), getPackageName() + ".AuraVoiceService"); }
