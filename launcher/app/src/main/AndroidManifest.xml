@@ -111,6 +111,7 @@
 
         <activity
             android:name=".MainActivity"
+            android:theme="@style/Theme.TvHome.Aura"
             android:exported="true"
             android:launchMode="singleTask"
             android:stateNotNeeded="true"
@@ -140,6 +141,7 @@
         <!-- AURA home screen: MainActivity hands Home over to it while aura_ui is on. Same window rules as MainActivity. -->
         <activity
             android:name=".AuraActivity"
+            android:theme="@style/Theme.TvHome.Aura"
             android:exported="false"
             android:launchMode="singleTask"
             android:stateNotNeeded="true"

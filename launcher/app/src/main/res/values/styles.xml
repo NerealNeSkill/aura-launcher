@@ -6,6 +6,12 @@
         <item name="android:windowAnimationStyle">@null</item>
     </style>
 
+    <!-- AURA starts on its own dark colour, so Home never flashes black between MainActivity and AuraActivity. -->
+    <style name="Theme.TvHome.Aura" parent="Theme.TvHome">
+        <item name="android:windowBackground">#FF070B14</item>
+        <item name="android:colorBackground">#FF070B14</item>
+    </style>
+
     <!-- Frosted pill, tvOS style. -->
     <style name="TopButtonBase">
         <item name="android:layout_width">wrap_content</item>

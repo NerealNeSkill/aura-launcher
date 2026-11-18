@@ -466,8 +466,10 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
                     .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
             try {
                 startActivity(aura);
+                overridePendingTransition(0, 0);
                 handedOver = true;
                 finish();
+                overridePendingTransition(0, 0);
                 return;
             } catch (RuntimeException e) {
                 // Fall through to the classic Home.
