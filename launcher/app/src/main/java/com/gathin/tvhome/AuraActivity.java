@@ -1010,8 +1010,8 @@ public class AuraActivity extends Activity {
                 t("Выбрать AURA ассистентом: кнопка откроет голосовой поиск AURA", "Make AURA the assistant: the button opens AURA's voice search"),
                 isAssistant() ? t("включено", "on") : t("не выбрано", "not set"), this::becomeAssistant);
         action(p, "googlesearch", t("Заменить поиск Google на AURA", "Replace Google search with AURA"),
-                t("Сделать AURA ассистентом и отключить приложение поиска Google командой ADB", "Make AURA the assistant and turn off the Google search app with an ADB command"),
-                googleSearchOn() ? t("Google включён", "Google on") : t("Google выключен", "Google off"), this::replaceGoogleSearch);
+                t("Одна кнопка: помощник кнопок, AURA — ассистент, поиск Google отключается. Нажмите ещё раз, чтобы вернуть Google", "One button: button helper on, AURA as the assistant, Google search off. Press again to bring Google back"),
+                googleSearchOn() ? t("Google", "Google") : t("AURA", "AURA"), this::replaceGoogleSearch);
         action(p, "micbtn", t("Назначить кнопку микрофона", "Teach the microphone button"),
                 t("Нажмите нужную кнопку на пульте: она откроет голосовой поиск", "Press a button on the remote: it will open voice search"),
                 AuraStyle.prefs(this).getString(AuraStyle.K_MIC_KEYS, "").isEmpty() ? "" : t("назначена", "taught"), this::learnMicButton);
@@ -1211,8 +1211,8 @@ public class AuraActivity extends Activity {
         java.util.List<String> out = new java.util.ArrayList<>();
         for (String pkg : GOOGLE_SEARCH) {
             try {
-                if (!onlyEnabled || getPackageManager().getApplicationInfo(pkg, 0).enabled) {
-                    getPackageManager().getApplicationInfo(pkg, 0);
+                if (!onlyEnabled || getPackageManager().getApplicationInfo(pkg, PackageManager.MATCH_DISABLED_COMPONENTS).enabled) {
+                    getPackageManager().getApplicationInfo(pkg, PackageManager.MATCH_DISABLED_COMPONENTS);
                     out.add(pkg);
                 }
             } catch (PackageManager.NameNotFoundException | RuntimeException ignored) { }
@@ -1329,87 +1329,69 @@ public class AuraActivity extends Activity {
         return !googleInstalled(true).isEmpty();
     }
 
-    /**
-     * An app cannot switch another app off, so this sets AURA as the assistant where it may and then hands over the
-     * ADB commands that finish the job (disable Google search), with a Copy button.
-     */
+    /** One button: turns Google search off through this TV's own ADB and makes AURA the assistant; pressed again it brings Google back. */
     private void replaceGoogleSearch() {
-        boolean assistant = false;
-        try {
-            String flat = assistService().flattenToString();
-            android.provider.Settings.Secure.putString(getContentResolver(), "assistant", flat);
-            android.provider.Settings.Secure.putString(getContentResolver(), "voice_interaction_service", flat);
-            assistant = true;
-        } catch (RuntimeException ignored) {
+        final boolean googleOn = googleSearchOn();
+        final java.util.List<String> pkgs = googleInstalled(false);
+        if (pkgs.isEmpty()) {
+            Toast.makeText(this, t("Приложение поиска Google на этом ТВ не найдено", "No Google search app on this TV"), Toast.LENGTH_LONG).show();
+            return;
         }
-        boolean helper = AuraStyle.helperOn(this) || switchHelperOn();
-        final StringBuilder cmd = new StringBuilder();
-        if (!assistant || !helper) cmd.append("adb shell pm grant ").append(getPackageName()).append(" android.permission.WRITE_SECURE_SETTINGS\n");
-        if (!helper) cmd.append("adb shell settings put secure enabled_accessibility_services ").append(helperComponent())
-                .append("\nadb shell settings put secure accessibility_enabled 1\n");
-        java.util.List<String> pkgs = googleInstalled(false);
-        if (pkgs.isEmpty()) pkgs.add(GOOGLE_SEARCH[0]);
-        StringBuilder undoSb = new StringBuilder();
-        for (int i = 0; i < pkgs.size(); i++) {
-            if (i > 0) { cmd.append("\n"); undoSb.append("\n"); }
-            cmd.append("adb shell pm disable-user --user 0 ").append(pkgs.get(i));
-            undoSb.append("adb shell pm enable ").append(pkgs.get(i));
-        }
-        final String undo = undoSb.toString();
-        String msg = (assistant ? t("AURA выбрана ассистентом. ", "AURA is now the assistant. ") : t("Чтобы AURA стала ассистентом, сначала выдайте право. ", "First grant the permission so AURA can become the assistant. "))
-                + t("Приложение не может отключить Google само. Выполните на ПК (ТВ подключён по ADB):\n\n", "An app cannot turn Google off itself. Run on a PC (the TV connected over ADB):\n\n")
-                + cmd + t("\n\nВернуть Google:\n", "\n\nTo bring Google back:\n") + undo;
         new AlertDialog.Builder(this, android.R.style.Theme_Material_Dialog_Alert)
-                .setTitle(t("Заменить поиск Google на AURA", "Replace Google search with AURA"))
-                .setMessage(msg)
-                .setPositiveButton(t("Отправить на ТВ (ADB)", "Send to this TV (ADB)"), (d, w) -> sendAdb(pkgs))
-                .setNeutralButton(t("Скопировать", "Copy"), (d, w) -> {
-                    android.content.ClipboardManager cm = (android.content.ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
-                    if (cm != null) cm.setPrimaryClip(android.content.ClipData.newPlainText("adb", cmd.toString()));
-                    Toast.makeText(this, t("Команды скопированы", "Commands copied"), Toast.LENGTH_SHORT).show();
-                })
+                .setTitle(googleOn ? t("Заменить поиск Google на AURA", "Replace Google search with AURA") : t("Вернуть поиск Google", "Bring Google search back"))
+                .setMessage(googleOn
+                        ? t("AURA включит помощника кнопок, сделает себя ассистентом и отключит приложение поиска Google через ADB телевизора (нужна «Отладка по сети»). Вернуть Google можно этой же кнопкой.",
+                                "AURA will switch the button helper on, become the assistant and turn off the Google search app through this TV's ADB (needs ADB over network). The same button brings Google back.")
+                        : t("AURA снова включит приложение поиска Google и перестанет быть ассистентом.", "AURA will switch the Google search app back on and stop being the assistant."))
+                .setPositiveButton(googleOn ? t("Заменить", "Replace") : t("Вернуть", "Bring back"), (d, w) -> runGoogleSwitch(googleOn, pkgs))
                 .setNegativeButton(android.R.string.cancel, null)
-                .setOnDismissListener(d -> build("row:googlesearch"))
                 .show();
     }
 
-    /** Runs the commands on this TV through its own adbd (ADB over network, port 5555), then finishes the AURA side. */
-    private void sendAdb(java.util.List<String> pkgs) {
+    private void runGoogleSwitch(final boolean disable, final java.util.List<String> pkgs) {
         final java.util.List<String> cmds = new java.util.ArrayList<>();
-        cmds.add("cmd appops set " + getPackageName() + " APP_AUTO_START allow");
-        cmds.add("pm grant " + getPackageName() + " android.permission.WRITE_SECURE_SETTINGS");
-        for (String pkg : pkgs) cmds.add("pm disable-user --user 0 " + pkg);
+        if (disable) {
+            cmds.add("cmd appops set " + getPackageName() + " APP_AUTO_START allow");
+            cmds.add("pm grant " + getPackageName() + " android.permission.WRITE_SECURE_SETTINGS");
+            for (String pkg : pkgs) cmds.add("pm disable-user --user 0 " + pkg);
+        } else {
+            for (String pkg : pkgs) cmds.add("pm enable " + pkg);
+        }
         Toast.makeText(this, t("Подключаюсь к ADB телевизора… Если ТВ спросит, разрешите «Всегда»", "Connecting to the TV's ADB... if it asks, allow \"Always\""), Toast.LENGTH_LONG).show();
         AdbShell.run(this, 5555, cmds, (ok, text) -> runOnUiThread(() -> {
-            String msg;
             if (ok) {
-                switchHelperOn();
-                // Disabling Google makes the system reset its assistant a moment later, so AURA is set after that, twice.
-                final android.os.Handler h = new android.os.Handler(android.os.Looper.getMainLooper());
-                final Runnable setAssistant = () -> {
+                if (disable) {
+                    rebindHelper();
+                    // Disabling Google makes the system reset its assistant a moment later, so AURA is set after that, twice.
+                    final android.os.Handler h = new android.os.Handler(android.os.Looper.getMainLooper());
+                    final Runnable setAssistant = () -> {
+                        try {
+                            String flat = assistService().flattenToString();
+                            android.provider.Settings.Secure.putString(getContentResolver(), "assistant", flat);
+                            android.provider.Settings.Secure.putString(getContentResolver(), "voice_interaction_service", flat);
+                        } catch (RuntimeException ignored) { }
+                    };
+                    h.postDelayed(setAssistant, 2500);
+                    h.postDelayed(() -> { setAssistant.run(); build("row:assistbtn"); build("row:googlesearch"); }, 6000);
+                    Toast.makeText(this, t("Готово: Google отключён, AURA — ассистент", "Done: Google is off, AURA is the assistant"), Toast.LENGTH_LONG).show();
+                } else {
                     try {
-                        String flat = assistService().flattenToString();
-                        android.provider.Settings.Secure.putString(getContentResolver(), "assistant", flat);
-                        android.provider.Settings.Secure.putString(getContentResolver(), "voice_interaction_service", flat);
+                        android.provider.Settings.Secure.putString(getContentResolver(), "assistant", null);
+                        android.provider.Settings.Secure.putString(getContentResolver(), "voice_interaction_service", null);
                     } catch (RuntimeException ignored) { }
-                };
-                h.postDelayed(setAssistant, 2500);
-                h.postDelayed(() -> { setAssistant.run(); build("row:assistbtn"); }, 6000);
-                msg = t("Готово: AURA — ассистент, помощник кнопок включён, поиск Google отключён.\n\n", "Done: AURA is the assistant, the button helper is on and Google search is off.\n\n") + text;
-            } else if ("no-adb".equals(text)) {
-                msg = t("Не удалось подключиться к ADB телевизора. Включите «Отладка по сети» (ADB over network, порт 5555) в «Для разработчиков» и нажмите ещё раз.",
-                        "Could not reach this TV's ADB. Turn on \"ADB over network\" (port 5555) under Developer options and try again.");
-            } else if ("timeout".equals(text)) {
-                msg = t("ТВ не ответил. Если на экране было окно «Разрешить отладку?», подтвердите «Всегда» и нажмите ещё раз.",
-                        "The TV did not answer. If it showed \"Allow debugging?\", confirm with \"Always\" and try again.");
-            } else {
-                msg = text;
+                    Toast.makeText(this, t("Готово: поиск Google включён", "Done: Google search is back on"), Toast.LENGTH_LONG).show();
+                }
+                build("row:googlesearch");
+                return;
             }
+            String msg;
+            if ("no-adb".equals(text)) msg = t("Не удалось подключиться к ADB телевизора. Включите «Отладка по сети» (порт 5555) в «Для разработчиков» и нажмите ещё раз.", "Could not reach this TV's ADB. Turn on \"ADB over network\" (port 5555) under Developer options and try again.");
+            else if ("timeout".equals(text)) msg = t("ТВ не ответил. Если на экране было окно «Разрешить отладку?», подтвердите «Всегда» и нажмите ещё раз.", "The TV did not answer. If it showed \"Allow debugging?\", confirm with \"Always\" and try again.");
+            else msg = text;
             new AlertDialog.Builder(this, android.R.style.Theme_Material_Dialog_Alert)
-                    .setTitle(t("Заменить поиск Google на AURA", "Replace Google search with AURA"))
+                    .setTitle(t("Поиск Google", "Google search"))
                     .setMessage(msg)
                     .setPositiveButton(android.R.string.ok, null)
-                    .setOnDismissListener(d -> build("row:googlesearch"))
                     .show();
         }));
     }
