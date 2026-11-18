@@ -1007,11 +1007,11 @@ public class AuraActivity extends Activity {
                 t("Приложения, которые показывают результаты в поиске", "Apps that show results in search"),
                 (AuraStyle.searchSources(this).size() - AuraStyle.searchOff(sp).size()) + t(" включено", " on"), this::pickSearchSources);
         action(p, "assistbtn", t("Кнопка микрофона на пульте", "Remote microphone button"),
-                t("Выбрать AURA ассистентом: кнопка откроет голосовой поиск AURA", "Make AURA the assistant: the button opens AURA's voice search"),
-                isAssistant() ? t("включено", "on") : t("не выбрано", "not set"), this::becomeAssistant);
-        action(p, "googlesearch", t("Заменить поиск Google на AURA", "Replace Google search with AURA"),
-                t("Одна кнопка: помощник кнопок, AURA — ассистент, поиск Google отключается. Нажмите ещё раз, чтобы вернуть Google", "One button: button helper on, AURA as the assistant, Google search off. Press again to bring Google back"),
-                googleSearchOn() ? t("Google", "Google") : t("AURA", "AURA"), this::replaceGoogleSearch);
+                t("Одно нажатие: помощник кнопок и AURA — ассистент (через ADB). Google остаётся включённым, голос работает", "One press: button helper on and AURA as the assistant (through ADB). Google stays on, voice keeps working"),
+                isAssistant() && AuraStyle.helperOn(this) ? t("включено", "on") : t("не выбрано", "not set"), this::setupButtons);
+        action(p, "googlesearch", t("Отключить поиск Google", "Turn Google search off"),
+                t("Отключает приложение Google TV Search через ADB: голосовой ввод AURA тогда не работает. Нажмите ещё раз, чтобы вернуть", "Turns the Google TV Search app off through ADB: AURA voice input stops working then. Press again to bring it back"),
+                googleSearchOn() ? t("включён", "on") : t("отключён", "off"), this::replaceGoogleSearch);
         action(p, "micbtn", t("Назначить кнопку микрофона", "Teach the microphone button"),
                 t("Нажмите нужную кнопку на пульте: она откроет голосовой поиск", "Press a button on the remote: it will open voice search"),
                 AuraStyle.prefs(this).getString(AuraStyle.K_MIC_KEYS, "").isEmpty() ? "" : t("назначена", "taught"), this::learnMicButton);
@@ -1338,12 +1338,12 @@ public class AuraActivity extends Activity {
             return;
         }
         new AlertDialog.Builder(this, android.R.style.Theme_Material_Dialog_Alert)
-                .setTitle(googleOn ? t("Заменить поиск Google на AURA", "Replace Google search with AURA") : t("Вернуть поиск Google", "Bring Google search back"))
+                .setTitle(googleOn ? t("Отключить поиск Google", "Turn Google search off") : t("Вернуть поиск Google", "Bring Google search back"))
                 .setMessage(googleOn
-                        ? t("AURA включит помощника кнопок, сделает себя ассистентом и отключит приложение поиска Google через ADB телевизора (нужна «Отладка по сети»). Вернуть Google можно этой же кнопкой.",
-                                "AURA will switch the button helper on, become the assistant and turn off the Google search app through this TV's ADB (needs ADB over network). The same button brings Google back.")
+                        ? t("AURA отключит приложение поиска Google через ADB телевизора (нужна «Отладка по сети»). Внимание: голосовой ввод AURA использует распознаватель Google, поэтому после отключения он перестанет работать. Вернуть Google можно этой же кнопкой.",
+                                "AURA will turn off the Google search app through this TV's ADB (needs ADB over network). Note: AURA voice input uses Google's recogniser, so it stops working. The same button brings Google back.")
                         : t("AURA снова включит приложение поиска Google и перестанет быть ассистентом.", "AURA will switch the Google search app back on and stop being the assistant."))
-                .setPositiveButton(googleOn ? t("Заменить", "Replace") : t("Вернуть", "Bring back"), (d, w) -> runGoogleSwitch(googleOn, pkgs))
+                .setPositiveButton(googleOn ? t("Отключить", "Turn off") : t("Вернуть", "Bring back"), (d, w) -> runGoogleSwitch(googleOn, pkgs))
                 .setNegativeButton(android.R.string.cancel, null)
                 .show();
     }
@@ -1403,6 +1403,43 @@ public class AuraActivity extends Activity {
             String v = android.provider.Settings.Secure.getString(getContentResolver(), "assistant");
             return v != null && v.equals(assistService().flattenToString());
         } catch (RuntimeException e) { return false; }
+    }
+
+    /** One press: auto-start right and secure-settings right through this TV's ADB, then the button helper and AURA as the assistant. Nothing is switched off. */
+    private void setupButtons() {
+        if (isAssistant() && AuraStyle.helperOn(this)) {
+            Toast.makeText(this, t("Уже включено: помощник кнопок и AURA — ассистент", "Already on: the button helper and AURA as the assistant"), Toast.LENGTH_SHORT).show();
+            return;
+        }
+        final java.util.List<String> cmds = new java.util.ArrayList<>();
+        cmds.add("cmd appops set " + getPackageName() + " APP_AUTO_START allow");
+        cmds.add("pm grant " + getPackageName() + " android.permission.WRITE_SECURE_SETTINGS");
+        Toast.makeText(this, t("Подключаюсь к ADB телевизора… Если ТВ спросит, разрешите «Всегда»", "Connecting to the TV's ADB... if it asks, allow \"Always\""), Toast.LENGTH_LONG).show();
+        AdbShell.run(this, 5555, cmds, (ok, text) -> runOnUiThread(() -> {
+            if (ok) {
+                rebindHelper();
+                final android.os.Handler h = new android.os.Handler(android.os.Looper.getMainLooper());
+                h.postDelayed(() -> {
+                    try {
+                        String flat = assistService().flattenToString();
+                        android.provider.Settings.Secure.putString(getContentResolver(), "assistant", flat);
+                        android.provider.Settings.Secure.putString(getContentResolver(), "voice_interaction_service", flat);
+                    } catch (RuntimeException ignored) { }
+                    build("row:assistbtn");
+                }, 2500);
+                Toast.makeText(this, t("Готово: помощник кнопок включён, AURA — ассистент", "Done: the button helper is on and AURA is the assistant"), Toast.LENGTH_LONG).show();
+                return;
+            }
+            String msg;
+            if ("no-adb".equals(text)) msg = t("Не удалось подключиться к ADB телевизора. Включите «Отладка по сети» (порт 5555) в «Для разработчиков» и нажмите ещё раз.", "Could not reach this TV's ADB. Turn on \"ADB over network\" (port 5555) under Developer options and try again.");
+            else if ("timeout".equals(text)) msg = t("ТВ не ответил. Если на экране было окно «Разрешить отладку?», подтвердите «Всегда» и нажмите ещё раз.", "The TV did not answer. If it showed \"Allow debugging?\", confirm with \"Always\" and try again.");
+            else msg = text;
+            new AlertDialog.Builder(this, android.R.style.Theme_Material_Dialog_Alert)
+                    .setTitle(t("Кнопка микрофона на пульте", "Remote microphone button"))
+                    .setMessage(msg)
+                    .setPositiveButton(android.R.string.ok, null)
+                    .show();
+        }));
     }
 
     /** Sets AURA as the assistant when the app may write secure settings; otherwise opens the TV's own page for it. */
