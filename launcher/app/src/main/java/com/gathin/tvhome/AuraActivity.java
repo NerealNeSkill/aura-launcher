@@ -1268,16 +1268,52 @@ public class AuraActivity extends Activity {
             Toast.makeText(this, t("AURA уже главный экран", "AURA is already the Home screen"), Toast.LENGTH_SHORT).show();
             return;
         }
-        String[] pages = {android.provider.Settings.ACTION_HOME_SETTINGS, android.provider.Settings.ACTION_MANAGE_DEFAULT_APPS_SETTINGS};
-        for (String page : pages) {
-            try {
-                startActivity(new Intent(page).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
-                Toast.makeText(this, t("Выберите AURA в пункте «Главный экран»", "Pick AURA under \"Home app\""), Toast.LENGTH_LONG).show();
-                return;
-            } catch (ActivityNotFoundException | SecurityException ignored) {
+        new AlertDialog.Builder(this, android.R.style.Theme_Material_Dialog_Alert)
+                .setTitle(t("AURA — главный экран", "AURA as the Home screen"))
+                .setMessage(t("Google TV не даёт выбрать главный экран в настройках. AURA может сделать это сама через ADB телевизора (нужна «Отладка по сети», порт 5555). Второй вариант ещё и отключает штатный лаунчер Google.",
+                        "Google TV does not let you pick the Home app in Settings. AURA can do it through this TV's own ADB (needs ADB over network, port 5555). The second option also turns off Google's stock launcher."))
+                .setPositiveButton(t("Сделать главным (ADB)", "Make it Home (ADB)"), (d, w) -> homeViaAdb(false))
+                .setNeutralButton(t("И отключить штатный", "And turn off the stock one"), (d, w) -> homeViaAdb(true))
+                .setNegativeButton(t("Настройки ТВ", "TV settings"), (d, w) -> {
+                    String[] pages = {android.provider.Settings.ACTION_HOME_SETTINGS, android.provider.Settings.ACTION_MANAGE_DEFAULT_APPS_SETTINGS};
+                    for (String page : pages) {
+                        try {
+                            startActivity(new Intent(page).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+                            return;
+                        } catch (ActivityNotFoundException | SecurityException ignored) {
+                        }
+                    }
+                })
+                .show();
+    }
+
+    /** Makes AURA the Home app through this TV's own adbd; optionally turns off the stock launchers that answer Home. */
+    private void homeViaAdb(boolean disableStock) {
+        final java.util.List<String> cmds = new java.util.ArrayList<>();
+        cmds.add("cmd package set-home-activity " + new ComponentName(this, MainActivity.class).flattenToShortString());
+        if (disableStock) {
+            for (android.content.pm.ResolveInfo ri : getPackageManager().queryIntentActivities(
+                    new Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME), 0)) {
+                String pkg = ri.activityInfo.packageName;
+                if (!pkg.equals(getPackageName()) && pkg.contains("launcher") && !cmds.contains("pm disable-user --user 0 " + pkg)) {
+                    cmds.add("pm disable-user --user 0 " + pkg);
+                }
             }
         }
-        Toast.makeText(this, "adb shell cmd package set-home-activity " + getPackageName() + "/.MainActivity", Toast.LENGTH_LONG).show();
+        Toast.makeText(this, t("Подключаюсь к ADB телевизора… Если ТВ спросит, разрешите «Всегда»", "Connecting to the TV's ADB... if it asks, allow \"Always\""), Toast.LENGTH_LONG).show();
+        AdbShell.run(this, 5555, cmds, (ok, text) -> runOnUiThread(() -> {
+            String msg;
+            if (ok) msg = t("Готово: AURA — главный экран.\n\n", "Done: AURA is the Home screen.\n\n") + text;
+            else if ("no-adb".equals(text)) msg = t("Не удалось подключиться к ADB телевизора. Включите «Отладка по сети» (порт 5555) в «Для разработчиков» и нажмите ещё раз.", "Could not reach this TV's ADB. Turn on \"ADB over network\" (port 5555) under Developer options and try again.");
+            else if ("timeout".equals(text)) msg = t("ТВ не ответил. Если на экране было окно «Разрешить отладку?», подтвердите «Всегда» и нажмите ещё раз.", "The TV did not answer. If it showed \"Allow debugging?\", confirm with \"Always\" and try again.");
+            else msg = text;
+            new AlertDialog.Builder(this, android.R.style.Theme_Material_Dialog_Alert)
+                    .setTitle(t("AURA — главный экран", "AURA as the Home screen"))
+                    .setMessage(msg)
+                    .setPositiveButton(android.R.string.ok, null)
+                    .setOnDismissListener(d -> build("row:homedefault"))
+                    .show();
+        }));
     }
 
     private boolean googleSearchOn() {
