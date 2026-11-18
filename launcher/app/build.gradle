@@ -17,6 +17,20 @@ android {
         versionName '3.4'
     }
 
+    // CI points AURA_KEYSTORE at one stable key (a repository secret), so every build is signed by the same
+    // key and installs over the previous one. Without it the debug key of the machine is used.
+    def auraKeystore = System.getenv('AURA_KEYSTORE')
+    if (auraKeystore) {
+        signingConfigs {
+            aura {
+                storeFile file(auraKeystore)
+                storePassword 'android'
+                keyAlias 'androiddebugkey'
+                keyPassword 'android'
+            }
+        }
+    }
+
     buildTypes {
         release {
             // R8 strips and optimises the code (AndroidX included): smaller APK, faster start on a slow TV CPU.
@@ -24,7 +38,7 @@ android {
             shrinkResources true
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
             // Sideloaded over ADB, never published: sign with the debug key so it installs over a debug build.
-            signingConfig signingConfigs.debug
+            signingConfig auraKeystore ? signingConfigs.aura : signingConfigs.debug
         }
     }
 

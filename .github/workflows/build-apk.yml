@@ -27,8 +27,10 @@ jobs:
         env:
           KS: ${{ secrets.DEBUG_KEYSTORE_B64 }}
         run: |
-          mkdir -p ~/.android
-          if [ -n "$KS" ]; then echo "$KS" | base64 -d > ~/.android/debug.keystore; fi
+          if [ -n "$KS" ]; then
+            echo "$KS" | base64 -d > "$RUNNER_TEMP/aura.keystore"
+            echo "AURA_KEYSTORE=$RUNNER_TEMP/aura.keystore" >> "$GITHUB_ENV"
+          fi
       - name: Build the release APK
         working-directory: launcher
         run: |
