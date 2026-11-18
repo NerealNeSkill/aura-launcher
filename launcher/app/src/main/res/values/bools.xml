@@ -6,5 +6,5 @@
     <bool name="date_single_line">true</bool>
     <!-- AURA home screen (AuraActivity, docs/aura.md). On: AURA is the Home screen of this app. "aura_ui" in a
          pushed config.json (the phone app sets it) can turn it off, and AURA's own settings can switch back. -->
-    <bool name="aura_ui">true</bool> <!-- stable signing check -->
+    <bool name="aura_ui">true</bool> <!-- stable signing check 2 -->
 </resources>
